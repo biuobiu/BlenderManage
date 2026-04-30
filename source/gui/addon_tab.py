@@ -23,7 +23,7 @@ from core import (
     get_blender_config_path, get_blender_versions_dir,
     get_blender_manager_dir, get_blender_executable,
     get_paths_dir, open_file_with_default_app,
-    run_in_background, ensure_dir,
+    run_in_background, ensure_dir, get_selected_main_version,
 )
 
 log = Logger()
@@ -63,6 +63,7 @@ class AddonManagementTab:
 
         self.directory_entry = ttkb.Entry(directory_frame, textvariable=self.directory_path, width=50)
         self.directory_entry.pack(side="left", padx=(0, 5))
+        self.directory_entry.bind("<Double-Button-1>", lambda e: self._go_to_file_path())
 
         ttkb.Button(
             directory_frame, text=_("Browse"),
@@ -94,14 +95,24 @@ class AddonManagementTab:
         self.plugin_search_entry.bind("<FocusOut>", self._on_plugin_focus_out)
         self.plugin_search_var.trace("w", self._on_plugin_search_change)
 
-        blender_installed = os.path.exists(get_blender_executable())
+        blender_installed = bool(self.blender_versions)
         version_values = self.blender_versions if blender_installed else []
         self.version_combobox = ttkb.Combobox(
             search_bar_frame, textvariable=self.version_var,
             values=version_values, state="readonly", width=22,
         )
         if version_values:
-            self.version_combobox.set(version_values[0])
+            default_ver = self.config.get("selected_main_version", "")
+            selected = version_values[0]
+            if default_ver:
+                if default_ver in version_values:
+                    selected = default_ver
+                else:
+                    for v in version_values:
+                        if default_ver.endswith(v) or v in default_ver:
+                            selected = v
+                            break
+            self.version_combobox.set(selected)
         else:
             self.version_combobox.set(_("Blender Not Installed"))
         self.version_combobox.pack(side="left", padx=(0, 5))
@@ -115,13 +126,15 @@ class AddonManagementTab:
             selectmode="browse",
         )
         self.plugins_tree.heading("Name", text=_("Plugin Name"))
-        self.plugins_tree.heading("Version", text=_("Version"))
+        self.plugins_tree.heading("Version", text=_("Plugin Version"))
         self.plugins_tree.heading("Compatible", text=_("Compatible with"))
         self.plugins_tree.heading("Status", text=_("Status"))
         self.plugins_tree.column("Name", width=300, anchor="center")
         self.plugins_tree.column("Version", width=150, anchor="center")
         self.plugins_tree.column("Compatible", width=150, anchor="center")
         self.plugins_tree.column("Status", width=100, anchor="center")
+        self.plugins_tree.tag_configure("enabled", foreground="#4a9eff")
+        self.plugins_tree.tag_configure("disabled", foreground="#ff6b6b")
         self.plugins_tree.grid(row=2, column=0, sticky="nsew", padx=10)
 
         scrollbar = ttkb.Scrollbar(self.frame, orient="vertical", command=self.plugins_tree.yview)
@@ -162,67 +175,39 @@ class AddonManagementTab:
             log.error(f"Failed to save plugin directory: {e}")
 
     def _load_plugin_directory(self):
-        default = self._get_default_plugin_directory()
-        file_path = os.path.join(get_paths_dir(), "plugin_directory.json")
-        try:
-            if os.path.exists(file_path):
-                with open(file_path, "r") as f:
-                    data = json.load(f)
-                plugin_dir = data.get("plugin_directory", default)
-                if plugin_dir and not os.path.exists(plugin_dir):
-                    try:
-                        os.makedirs(plugin_dir, exist_ok=True)
-                    except Exception:
-                        pass
-                    return default
-                return plugin_dir
-        except Exception as e:
-            log.error(f"Failed to load plugin directory: {e}")
-        return default
+        return self._get_default_plugin_directory()
 
     def _get_default_plugin_directory(self):
+        ver = get_selected_main_version()
+        if ver:
+            clean = ver.replace("Blender ", "", 1)
+            major_minor = ".".join(clean.split(".")[:2])
+            return os.path.join(get_blender_config_path(), major_minor, "scripts", "addons")
         return os.path.join(get_blender_manager_dir(), "addons")
 
     # ---------- Blender version helpers ----------
 
     def _get_blender_versions(self):
-        versions = set()
-        import re, subprocess
-        try:
-            main_exe = get_blender_executable()
-            if os.path.isfile(main_exe):
-                try:
-                    si = None
-                    if os.name == "nt":
-                        si = subprocess.STARTUPINFO()
-                        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                        si.wShowWindow = 0
-                    result = subprocess.run([main_exe, "--version"],
-                                            stdout=subprocess.PIPE, text=True,
-                                            startupinfo=si, timeout=15)
-                    line = result.stdout.splitlines()[0] if result.stdout else ""
-                    m = re.search(r"(\d+\.\d+)", line)
-                    if m:
-                        versions.add(m.group(1))
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        versions = []
         try:
             vdir = get_blender_versions_dir()
-            if os.path.exists(vdir):
-                for folder in sorted(os.listdir(vdir), reverse=True):
-                    fpath = os.path.join(vdir, folder)
-                    if os.path.isdir(fpath):
-                        exe_name = "blender.exe" if os.name == "nt" else "blender"
-                        exe_path = os.path.join(fpath, exe_name)
-                        if os.path.isfile(exe_path):
-                            parts = folder.split()
-                            if parts and parts[-1].count(".") >= 1:
-                                versions.add(parts[-1])
+            if not os.path.exists(vdir):
+                return versions
+            for folder in sorted(os.listdir(vdir), reverse=True):
+                fpath = os.path.join(vdir, folder)
+                if not os.path.isdir(fpath):
+                    continue
+                exe_name = "blender.exe" if os.name == "nt" else "blender"
+                exe_path = os.path.join(fpath, exe_name)
+                if not os.path.isfile(exe_path):
+                    continue
+                parts = folder.split()
+                version_str = parts[-1]
+                if re.match(r"^\d+\.\d+", version_str):
+                    versions.append(version_str)
         except Exception as e:
             log.error(f"Failed to get Blender versions: {e}")
-        return sorted(versions, reverse=True)
+        return sorted(set(versions), reverse=True)
 
     def _get_matching_versions(self, base_version_prefix):
         matching = []
@@ -316,14 +301,14 @@ class AddonManagementTab:
         if not selected_version or selected_version == _("Select Blender Version"):
             return
         try:
-            blender_config_path = get_blender_config_path()
-        except EnvironmentError as e:
-            log.error(f"Error determining Blender config path: {e}")
-            return
-        self.directory_path.set(
-            os.path.join(blender_config_path, selected_version, "scripts", "addons")
-        )
-        self.refresh_plugins_list()
+            clean = selected_version.replace("Blender ", "", 1)
+            major_minor = ".".join(clean.split(".")[:2])
+            addons_path = os.path.join(get_blender_config_path(), major_minor, "scripts", "addons")
+            os.makedirs(addons_path, exist_ok=True)
+            self.directory_path.set(addons_path)
+            self.refresh_plugins_list()
+        except Exception as e:
+            log.error(f"Error setting Blender version path: {e}")
 
     def _show_plugin_context_menu(self, event):
         item_id = self.plugins_tree.identify_row(event.y)
@@ -350,10 +335,10 @@ class AddonManagementTab:
     # ---------- Directory browsing ----------
 
     def browse_directory(self):
-        directory = filedialog.askdirectory()
+        current = self.directory_path.get()
+        directory = filedialog.askdirectory(initialdir=current if os.path.exists(current) else None)
         if directory:
             self.directory_path.set(directory)
-            self._save_plugin_directory(directory)
             self.refresh_plugins_list()
 
     def _go_to_file_path(self):
@@ -380,11 +365,20 @@ class AddonManagementTab:
             return
         for item in sorted(os.listdir(addons_dir)):
             item_path = os.path.join(addons_dir, item)
-            if item == "__pycache__" or item.endswith(".pyc"):
+            if item.startswith(".") or item == "__pycache__" or item.endswith(".pyc"):
                 continue
             if os.path.isdir(item_path):
-                version, compatible = self._get_plugin_info(item_path)
-                self.plugins_tree.insert("", "end", values=(item, version, compatible, " "))
+                if os.path.isfile(os.path.join(item_path, "__init__.py")):
+                    version, compatible = self._get_plugin_info(item_path)
+                    self.plugins_tree.insert("", "end", values=(item, version, compatible, " "))
+                else:
+                    for sub in sorted(os.listdir(item_path)):
+                        sub_path = os.path.join(item_path, sub)
+                        if sub.startswith(".") or sub == "__pycache__":
+                            continue
+                        if os.path.isdir(sub_path) and os.path.isfile(os.path.join(sub_path, "__init__.py")):
+                            version, compatible = self._get_plugin_info(sub_path)
+                            self.plugins_tree.insert("", "end", values=(f"{item}/{sub}", version, compatible, " "))
             elif item.endswith(".py"):
                 version, compatible = self._get_plugin_info(item_path)
                 plugin_name = os.path.splitext(item)[0]
@@ -398,10 +392,24 @@ class AddonManagementTab:
         if not os.path.exists(addons_dir):
             return
         for item in os.listdir(addons_dir):
-            if query in item.lower():
-                item_path = os.path.join(addons_dir, item)
-                version, compatible = self._get_plugin_info(item_path)
-                self.plugins_tree.insert("", "end", values=(item, version, compatible))
+            item_path = os.path.join(addons_dir, item)
+            if item.startswith(".") or item == "__pycache__" or item.endswith(".pyc"):
+                continue
+            if os.path.isdir(item_path):
+                if os.path.isfile(os.path.join(item_path, "__init__.py")):
+                    if query in item.lower():
+                        version, compatible = self._get_plugin_info(item_path)
+                        self.plugins_tree.insert("", "end", values=(item, version, compatible))
+                else:
+                    for sub in os.listdir(item_path):
+                        sub_path = os.path.join(item_path, sub)
+                        if sub.startswith(".") or sub == "__pycache__":
+                            continue
+                        if os.path.isdir(sub_path) and os.path.isfile(os.path.join(sub_path, "__init__.py")):
+                            display = f"{item}/{sub}"
+                            if query in display.lower():
+                                version, compatible = self._get_plugin_info(sub_path)
+                                self.plugins_tree.insert("", "end", values=(display, version, compatible))
 
     # ---------- Plugin info parsing ----------
 
@@ -450,8 +458,10 @@ class AddonManagementTab:
     # ---------- Adding plugins ----------
 
     def add_plugin(self):
+        initial = self.directory_path.get()
         file_paths = filedialog.askopenfilenames(
             title=_("Select Plugin Files"),
+            initialdir=initial if os.path.exists(initial) else None,
             filetypes=[(_("Python Files"), "*.py"), (_("Zip Files"), "*.zip")],
         )
         if not file_paths:
@@ -501,7 +511,7 @@ class AddonManagementTab:
                 addon_name = os.path.splitext(basename)[0]
 
             self.refresh_plugins_list()
-            messagebox.showinfo(_("Success"), _(f"Plugin '{basename}' has been added successfully!"))
+            messagebox.showinfo(_("Success"), _("Plugin '{0}' has been added successfully!").format(basename))
 
             if self.auto_activate_plugin_var.get() and addon_name:
                 self._auto_activate_plugin(addon_name)
@@ -530,16 +540,16 @@ class AddonManagementTab:
         plugin_file_path = os.path.join(addons_dir, plugin_name + ".py")
 
         if os.path.exists(plugin_folder_path):
-            confirm = messagebox.askyesno(_("Confirm"), _(f"Are you sure you want to remove the plugin folder '{plugin_name}'?"))
+            confirm = messagebox.askyesno(_("Confirm"), _("Are you sure you want to remove the plugin folder '{plugin_name}'?").format(plugin_name=plugin_name))
             if confirm:
                 try:
                     shutil.rmtree(plugin_folder_path)
-                    messagebox.showinfo(_("Success"), _(f"Plugin folder '{plugin_name}' removed."))
+                    messagebox.showinfo(_("Success"), _("Plugin folder '{plugin_name}' removed.").format(plugin_name=plugin_name))
                     self.refresh_plugins_list()
                 except Exception as e:
                     messagebox.showerror(_("Error"), _(f"Failed to remove plugin folder: {e}"))
         elif os.path.exists(plugin_file_path):
-            confirm = messagebox.askyesno(_("Confirm"), _(f"Are you sure you want to remove the plugin file '{plugin_name}.py'?"))
+            confirm = messagebox.askyesno(_("Confirm"), _("Are you sure you want to remove the plugin file '{plugin_name}.py'?").format(plugin_name=plugin_name))
             if confirm:
                 try:
                     os.remove(plugin_file_path)
@@ -690,7 +700,8 @@ class AddonManagementTab:
             messagebox.showerror(_("Error"), _("No addon selected."))
             return
         selected_addon = self.plugins_tree.item(selected_item, "values")[0]
-        threading.Thread(target=self.activate_addon_in_all_versions, args=(selected_addon,), daemon=True).start()
+        base_addon = selected_addon.split("/")[-1]
+        threading.Thread(target=self.activate_addon_in_all_versions, args=(base_addon,), daemon=True).start()
 
     def deactivate_selected_addon_in_versions(self):
         selected_item = self.plugins_tree.focus()
@@ -698,7 +709,8 @@ class AddonManagementTab:
             messagebox.showerror(_("Error"), _("No addon selected."))
             return
         selected_addon = self.plugins_tree.item(selected_item, "values")[0]
-        threading.Thread(target=self.deactivate_addon_in_all_versions, args=(selected_addon,), daemon=True).start()
+        base_addon = selected_addon.split("/")[-1]
+        threading.Thread(target=self.deactivate_addon_in_all_versions, args=(base_addon,), daemon=True).start()
 
     def activate_addon_in_all_versions(self, selected_addon):
         selected_version = self.version_var.get()
@@ -744,11 +756,60 @@ class AddonManagementTab:
 
     def _run_addon_script(self, blender_executable, addon_name, enable=True):
         action = "enable" if enable else "disable"
+        params = "default_set=True, persistent=True" if enable else "default_set=True"
         script_content = f"""
-import bpy
-bpy.ops.preferences.addon_{action}(module="{addon_name}")
-bpy.ops.wm.save_userpref()
-print("Addon '{addon_name}' {action}d successfully.")
+import bpy, addon_utils, sys, os, importlib
+for p in sys.path:
+    if 'addons' in p.lower():
+        print(f'ADDON_PATH: {{p}}', file=sys.stderr)
+found = os.path.exists(os.path.join(bpy.utils.user_resource('SCRIPTS'), 'addons', '{addon_name}'))
+print(f'ADDON_EXISTS: {{found}}', file=sys.stderr)
+try:
+    importlib.import_module('{addon_name}')
+    print(f'IMPORT_OK', file=sys.stderr)
+except Exception as e:
+    print(f'IMPORT_FAIL: {{e}}', file=sys.stderr)
+enabled = [a.module for a in bpy.context.preferences.addons]
+if '{addon_name}' in enabled:
+    print(f'ENABLED: yes', file=sys.stderr)
+else:
+    print(f'ENABLED: no', file=sys.stderr)
+try:
+    if {enable}:
+        if '{addon_name}' in enabled:
+            print("ALREADY_ACTIVE")
+        else:
+            ok = addon_utils.enable("{addon_name}", {params})
+            if ok:
+                bpy.ops.wm.save_userpref()
+                print("SUCCESS")
+            else:
+                print(f"ERROR: addon '{addon_name}' enable failed")
+    else:
+        if '{addon_name}' not in enabled:
+            print("ALREADY_INACTIVE")
+        else:
+            normalized = "{addon_name}".replace(" ", "_")
+            ok = False
+            for i, a in enumerate(bpy.context.preferences.addons):
+                if a.module == normalized:
+                    try:
+                        addon_utils.unregister(module_name=normalized)
+                    except Exception:
+                        pass
+                    bpy.context.preferences.addons.remove(bpy.context.preferences.addons[i])
+                    ok = True
+                    break
+            if not ok:
+                ok = addon_utils.disable("{addon_name}", {params})
+            if ok:
+                bpy.ops.wm.save_userpref()
+                print("SUCCESS")
+            else:
+                print(f"ERROR: addon '{addon_name}' disable failed")
+except Exception as e:
+    print(f"ERROR: {{e}}")
+    sys.exit(1)
 """
         try:
             with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py", encoding="utf-8") as f:
@@ -759,11 +820,26 @@ print("Addon '{addon_name}' {action}d successfully.")
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = 0
 
-            subprocess.run(
+            result = subprocess.run(
                 [blender_executable, "--background", "--python", temp_script_path],
-                check=True, startupinfo=startupinfo,
+                capture_output=True, text=False, startupinfo=startupinfo, check=False,
             )
             os.remove(temp_script_path)
+
+            stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+            output = stdout + stderr
+            if "SUCCESS" in output:
+                msg = _("Addon '{0}' enabled.").format(addon_name) if enable else _("Addon '{0}' disabled.").format(addon_name)
+                self.frame.after(0, lambda: messagebox.showinfo(_("Success"), msg))
+            elif "ALREADY_ACTIVE" in output:
+                self.frame.after(0, lambda: messagebox.showinfo(_("Info"), _("Addon '{0}' is already enabled.").format(addon_name)))
+            elif "ALREADY_INACTIVE" in output:
+                self.frame.after(0, lambda: messagebox.showinfo(_("Info"), _("Addon '{0}' is already disabled.").format(addon_name)))
+            else:
+                err = output.strip() or _("Unknown error")
+                log.error(f"Failed to {action} addon '{addon_name}': {err}")
+                self.frame.after(0, lambda: messagebox.showerror(_("Error"), err))
         except Exception as e:
             log.error(f"Failed to {action} addon '{addon_name}' for {blender_executable}: {e}")
 
@@ -834,8 +910,15 @@ except Exception as e:
             def update_treeview():
                 for item in self.plugins_tree.get_children():
                     addon_name = self.plugins_tree.item(item, "values")[0]
-                    status = _("Active") if addon_status.get(addon_name, False) else _("Inactive")
+                    base_name = addon_name.split("/")[-1]
+                    normalized = base_name.replace(" ", "_").replace("-", "_")
+                    active = (addon_status.get(addon_name, False) or
+                              addon_status.get(base_name, False) or
+                              addon_status.get(normalized, False))
+                    tag = "enabled" if active else "disabled"
+                    status = _("Activated") if active else _("Deactivated")
                     self.plugins_tree.set(item, "Status", status)
+                    self.plugins_tree.item(item, tags=(tag,))
 
             self.plugins_tree.after(0, update_treeview)
 

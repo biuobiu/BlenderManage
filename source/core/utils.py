@@ -120,13 +120,20 @@ def _detect_latest_version(versions_dir):
 
 def get_selected_main_version():
     try:
-        cfg = os.path.join(get_blender_manager_dir(), "config.json")
+        cfg = os.path.join(os.path.expanduser("~"), ".BlenderManager", "config.json")
         if os.path.exists(cfg):
             with open(cfg, "r") as f:
                 data = json.load(f)
             ver = data.get("selected_main_version", "")
-            if ver and os.path.isdir(os.path.join(get_blender_versions_dir(), ver)):
-                return ver
+            if ver:
+                versions_dir = get_blender_versions_dir()
+                exact = os.path.join(versions_dir, ver)
+                if os.path.isdir(exact):
+                    return ver
+                if os.path.exists(versions_dir):
+                    for d in os.listdir(versions_dir):
+                        if os.path.isdir(os.path.join(versions_dir, d)) and (ver in d or d in ver):
+                            return d
         latest = _detect_latest_version(get_blender_versions_dir())
         return latest
     except Exception:

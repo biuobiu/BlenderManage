@@ -25,7 +25,8 @@ from core import (
     Logger, DataManager, ConfigManager, run_in_background, resource_path,
     get_blender_executable, get_blender_versions_dir,
     get_blender_config_path, get_blender_manager_dir,
-    get_paths_dir, open_file_with_default_app
+    get_paths_dir, open_file_with_default_app,
+    ensure_dir,
 )
 
 log = Logger()
@@ -67,6 +68,7 @@ class ProjectManagementTab:
             browser_frame, textvariable=self.project_directory_path, width=50
         )
         self.project_directory_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.project_directory_entry.bind("<Double-Button-1>", lambda e: self.go_to_project_file_path())
 
         ttkb.Button(
             browser_frame, text=_("Browse"), takefocus=False,
@@ -452,6 +454,15 @@ class ProjectManagementTab:
             log.error(f"Error scrolling to item: {e}")
 
     def browse_project_directory(self):
+        current = self.project_directory_path.get()
+        if current and os.path.exists(current):
+            if os.name == "nt":
+                os.startfile(current)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", current])
+            else:
+                subprocess.Popen(["xdg-open", current])
+            return
         directory = filedialog.askdirectory()
         if directory:
             total_files = sum([len(files) for _, _, files in os.walk(directory)])
@@ -465,7 +476,6 @@ class ProjectManagementTab:
                 if not proceed:
                     return
             self.project_directory_path.set(directory)
-            self._save_project_directory(directory)
             self.refresh_projects_list()
 
     def add_project(self, project_dir=None, copy_individually=False, extract_individually=False):
@@ -1319,30 +1329,7 @@ elif export_path.lower().endswith(".obj"):
             log.error(f"Error reading Blender version from {file_path}: {e}")
             return _("Compressed Format")
 
-    def _save_project_directory(self, directory):
-        config_file_path = os.path.join(get_paths_dir(), "project_directory.json")
-        try:
-            os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
-            with open(config_file_path, "w") as f:
-                json.dump({"project_directory": directory}, f)
-        except PermissionError:
-            messagebox.showerror(
-                _("Error"),
-                _("Permission denied: Unable to save project directory. Please check your permissions.")
-            )
-        except Exception as e:
-            messagebox.showerror(_("Error"), _("Failed to save project directory: {0}").format(e))
-
     def _load_project_directory(self):
-        config_file_path = os.path.join(get_paths_dir(), "project_directory.json")
-        default_project_dir = os.path.join(get_blender_manager_dir(), "Projects")
-        try:
-            with open(config_file_path, "r") as f:
-                data = json.load(f)
-            return data.get("project_directory", default_project_dir)
-        except FileNotFoundError:
-            os.makedirs(default_project_dir, exist_ok=True)
-            return default_project_dir
-        except Exception as e:
-            messagebox.showerror(_("Error"), _("Failed to load project directory: {0}").format(e))
-            return default_project_dir
+        default = os.path.join(get_blender_manager_dir(), "Projects")
+        ensure_dir(default)
+        return default

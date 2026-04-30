@@ -20,7 +20,7 @@ from core import (
     get_blender_executable, get_blender_config_path,
     get_blender_install_dir, get_blender_versions_dir,
     get_blender_manager_dir, get_paths_dir, ensure_dir,
-    open_file_with_default_app,
+    load_path_overrides, open_file_with_default_app,
 )
 from services import VersionService, UpdateService
 
@@ -103,17 +103,23 @@ class MainMenuTab:
         self.progress_label.grid(row=6, column=0, sticky="ew", pady=(0, 3))
         self.progress_label.grid_remove()
 
+        refresh_btn = ttkb.Button(
+            btn_frame, text=_("Refresh"), takefocus=False,
+            command=self._refresh_all, bootstyle=SECONDARY, width=15
+        )
+        refresh_btn.grid(row=7, column=0, pady=(5, 5), sticky="ew")
+
         settings_btn = ttkb.Button(
             btn_frame, text=_("Settings"), takefocus=False,
             command=self.app._open_settings_window, width=15
         )
-        settings_btn.grid(row=7, column=0, pady=(10, 5), sticky="ew")
+        settings_btn.grid(row=8, column=0, pady=(10, 5), sticky="ew")
 
         help_btn = ttkb.Button(
             btn_frame, text=_("Help"), takefocus=False,
             command=self.app._open_help_window, width=15
         )
-        help_btn.grid(row=8, column=0, pady=(10, 5), sticky="ew")
+        help_btn.grid(row=9, column=0, pady=(10, 5), sticky="ew")
 
         self.bm_version_label = ttkb.Label(
             self.frame,
@@ -264,7 +270,8 @@ class MainMenuTab:
 
         def on_yes():
             dialog.destroy()
-            self._install_blender()
+            self.app.notebook.select(self.app.version_management_tab.frame)
+            self.app.version_management_tab.show_install_view()
 
         ttkb.Button(bf, text=_("Yes"), command=on_yes, width=14).grid(row=0, column=0, padx=5)
         ttkb.Button(bf, text=_("No"), command=dialog.destroy, width=14).grid(row=0, column=1, padx=5)
@@ -272,93 +279,6 @@ class MainMenuTab:
         ttkb.Button(frame, text=_("Already Installed"),
                      command=lambda: self._handle_existing_blender(dialog),
                      width=30).pack()
-
-    def _install_blender(self):
-        def install():
-            latest, download_url = self._get_latest_blender_version()
-            if not latest or not download_url:
-                self.app.after(0, lambda: messagebox.showerror(_("Error"), _("Could not fetch latest version.")))
-                return
-            try:
-                self.app.after(0, self._show_progress)
-                self.cancel_event.clear()
-                self.app.after(0, lambda: self.cancel_btn.grid())
-
-                file_name = os.path.basename(download_url)
-                file_path = os.path.join(get_blender_manager_dir(), file_name)
-
-                import requests
-                session = requests.Session()
-                response = session.get(download_url, stream=True, timeout=10)
-                response.raise_for_status()
-                total_length = int(response.headers.get('content-length', 0))
-                downloaded = 0
-
-                ensure_dir(os.path.dirname(file_path))
-                with open(file_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if self.cancel_event.is_set():
-                            f.close()
-                            os.remove(file_path)
-                            self.app.after(0, self._hide_progress)
-                            return
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if total_length > 0:
-                                pct = downloaded / total_length * 100
-                                self.app.after(0, lambda v=pct: self.progress_var.set(v))
-
-                import shutil, zipfile, os
-                target = os.path.join(get_blender_versions_dir(), latest)
-                if os.path.exists(target):
-                    shutil.rmtree(target)
-                ensure_dir(target)
-
-                if file_name.endswith('.zip'):
-                    with zipfile.ZipFile(file_path, 'r') as zf:
-                        root_items = zf.namelist()
-                        top = set(i.split('/')[0] for i in root_items if i.strip())
-                        if len(top) == 1:
-                            root = list(top)[0]
-                            for member in zf.infolist():
-                                mpath = member.filename
-                                if mpath.startswith(root + '/'):
-                                    rel = mpath[len(root) + 1:]
-                                    if rel:
-                                        tp = os.path.join(target, rel)
-                                        if member.is_dir():
-                                            os.makedirs(tp, exist_ok=True)
-                                        else:
-                                            os.makedirs(os.path.dirname(tp), exist_ok=True)
-                                            with zf.open(member) as src, open(tp, 'wb') as dst:
-                                                shutil.copyfileobj(src, dst)
-                        else:
-                            zf.extractall(target)
-                elif file_name.endswith('.dmg'):
-                    if sys.platform == "darwin":
-                        import tempfile as tf2
-                        mount = tf2.mkdtemp()
-                        subprocess.run(["hdiutil", "attach", file_path, "-mountpoint", mount], check=True)
-                        app_src = os.path.join(mount, "Blender.app")
-                        if os.path.exists(app_src):
-                            shutil.copytree(app_src, os.path.join(target, "Blender.app"))
-                        subprocess.run(["hdiutil", "detach", mount], check=True)
-                        shutil.rmtree(mount)
-
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
-                self._update_main_version(latest)
-                self._update_blender_version_label()
-                self.app.after(0, lambda: self.cancel_btn.grid_remove())
-                self.app.after(0, lambda: messagebox.showinfo(_("Done"), _("Blender installed.")))
-            except Exception as e:
-                self.app.after(0, lambda: messagebox.showerror(_("Error"), str(e)))
-            finally:
-                self.app.after(0, self._hide_progress)
-
-        threading.Thread(target=install, daemon=True).start()
 
     def _handle_existing_blender(self, dialog):
         dialog.destroy()
@@ -782,6 +702,32 @@ class MainMenuTab:
         else:
             self.bm_version_label.config(text=text, foreground="green", cursor="arrow")
             self.bm_version_label.unbind("<Button-1>")
+
+    def _refresh_all(self):
+        cfg_path = os.path.join(os.path.expanduser("~"), ".BlenderManager", "config.json")
+        load_path_overrides(cfg_path)
+        self.config = ConfigManager()
+        self._update_blender_version_label()
+        self._update_bm_version_label()
+        self._load_recent_projects()
+
+        from core import get_blender_manager_dir
+        root = get_blender_manager_dir()
+
+        if hasattr(self.app, "project_management_tab"):
+            tab = self.app.project_management_tab
+            new_path = os.path.join(root, "Projects")
+            tab.project_directory_path.set(new_path)
+            tab.load_folder_into_tree(new_path, "")
+            tab.refresh_projects_list()
+
+        if hasattr(self.app, "render_management_tab"):
+            tab = self.app.render_management_tab
+            tab.current_folder = os.path.join(root, "renders")
+            tab.refresh_render_list()
+
+        if hasattr(self.app, "version_management_tab"):
+            self.app.version_management_tab._refresh_installed_versions_ui()
 
     def _show_blender_release_notes(self, event):
         exe = get_blender_executable()

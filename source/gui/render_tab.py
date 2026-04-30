@@ -6,7 +6,7 @@ import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 from PIL import Image, ImageTk
 
-from core import Logger, DataManager, ConfigManager, run_in_background, open_file_with_default_app
+from core import Logger, DataManager, ConfigManager, run_in_background, open_file_with_default_app, get_blender_manager_dir
 from i18n import _
 
 log = Logger()
@@ -23,7 +23,7 @@ class RenderManagementTab:
         self.render_file_paths = {}
         self.current_render_name = None
         self.notes_data = self.data.load_notes()
-        self.current_folder = self.data.get_render_folder_path()
+        self.current_folder = os.path.join(get_blender_manager_dir(), "renders")
         self._build_ui()
         self.refresh_render_list()
 
@@ -180,10 +180,18 @@ class RenderManagementTab:
 
     def browse_render_directory(self):
         from tkinter import filedialog
+        current = self.current_folder
+        if current and os.path.exists(current):
+            if os.name == "nt":
+                os.startfile(current)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", current])
+            else:
+                subprocess.Popen(["xdg-open", current])
+            return
         folder = filedialog.askdirectory(title=_("Select Render Folder"))
         if folder:
             self.current_folder = folder
-            self.data.save_render_folder_path(folder)
             self.refresh_render_list()
 
     def open_render(self):

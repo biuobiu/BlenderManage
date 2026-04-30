@@ -83,6 +83,20 @@ class SettingsWindow:
             entry.grid(row=i, column=1, sticky="ew", padx=(10, 0), pady=(6 if i > 0 else 0, 0))
             self._path_vars[key] = var
 
+        def _update_derived_paths(*_):
+            root = self._path_vars["blender_manager_dir"].get().strip().strip('"')
+            for key, sub in [("blender_versions_dir", "BlenderVersions"),
+                             ("user_data_dir", "mngaddon"),
+                             ("paths_dir", "paths"),
+                             ("logs", "logs")]:
+                if key in self._path_vars:
+                    self._path_vars[key].set(os.path.join(root, sub))
+            for key in ["assets", "addons", "Projects", "renders"]:
+                if key in self._path_vars:
+                    self._path_vars[key].set(os.path.join(root, key))
+
+        self._path_vars["blender_manager_dir"].trace("w", _update_derived_paths)
+
         sep = ttkb.Separator(tab, orient="horizontal")
         sep.grid(row=len(path_keys), column=0, columnspan=2, sticky="ew", pady=12)
 
@@ -122,12 +136,12 @@ class SettingsWindow:
         sep2.grid(row=ver_row + 2, column=0, columnspan=2, sticky="ew", pady=12)
 
         def _save_paths():
-            overrides = {k: v.get().strip() for k, v in self._path_vars.items()}
+            cfg_path = os.path.join(os.path.expanduser("~"), ".BlenderManager", "config.json")
+            overrides = {k: v.get().strip().strip('"') for k, v in self._path_vars.items()}
             set_path_overrides(overrides)
-            save_path_overrides(os.path.join(get_blender_manager_dir(), "config.json"))
+            save_path_overrides(cfg_path)
             v = self._version_var.get()
             if v:
-                cfg_path = os.path.join(get_blender_manager_dir(), "config.json")
                 try:
                     with open(cfg_path, "r") as f:
                         cfg = json.load(f)

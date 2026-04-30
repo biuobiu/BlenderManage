@@ -38,16 +38,17 @@ class Logger:
             datefmt="%Y-%m-%d %H:%M:%S"
         )
         file_handler.setFormatter(file_formatter)
-
-        console_handler = logging.StreamHandler(sys.__stdout__ if sys.stdout else sys.__stderr__)
-        console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter(
-            "%(levelname)s: %(message)s"
-        )
-        console_handler.setFormatter(console_formatter)
-
         self._logger.addHandler(file_handler)
-        self._logger.addHandler(console_handler)
+
+        stream = sys.stdout or sys.__stdout__ or sys.__stderr__
+        if stream:
+            console_handler = logging.StreamHandler(stream)
+            console_handler.setLevel(logging.INFO)
+            console_formatter = logging.Formatter(
+                "%(levelname)s: %(message)s"
+            )
+            console_handler.setFormatter(console_formatter)
+            self._logger.addHandler(console_handler)
 
     @property
     def logger(self):

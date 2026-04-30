@@ -320,5 +320,9 @@ def register():
     bpy.app.timers.register(check_for_settings_file)
 
 
+def unregister():
+    pass
+
+
 if __name__ == "__main__":
     register()

@@ -131,6 +131,7 @@ class VersionManagementTab:
                 self.install_btn.configure(text=_('Install'), state='normal')
                 self.cancel_event.clear()
                 self.install_progress_var.set(0)
+                self.app.update_blender_version_label()
                 self.frame.after(0, lambda: self._safe_messagebox("info", _("Success"), _("Successfully installed Blender {0}.").format(version)))
             elif msg[0] == 'UPDATE_TREEVIEW':
                 versions = msg[1]

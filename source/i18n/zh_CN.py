@@ -60,7 +60,7 @@ def get_translations():
         # Addon Management Tab
         "Addon Management": "插件管理",
         "Plugin Name": "插件名称",
-        "Version": "版本",
+        "Plugin Version": "插件版本",
         "Compatible with": "兼容版本",
         "Status": "状态",
         "Search Addons": "搜索插件",
@@ -308,6 +308,10 @@ def get_translations():
         "Blender Foundation folder not found. Please install Blender first.": "未找到 Blender Foundation 文件夹。请先安装 Blender。",
         "Blender version not found. Please ensure Blender is installed.": "未找到 Blender 版本。请确保已安装 Blender。",
         "Addon has been installed and activated successfully in all Blender versions.": "插件已成功安装在所有 Blender 版本中并激活。",
+        "Addon '{0}' enabled.": "插件 '{0}' 已启用。",
+        "Addon '{0}' disabled.": "插件 '{0}' 已停用。",
+        "Addon '{0}' is already enabled.": "插件 '{0}' 已处于启用状态。",
+        "Addon '{0}' is already disabled.": "插件 '{0}' 已处于停用状态。",
         "Failed to extract addon:": "提取插件失败：",
         "Failed to save theme:": "保存主题失败：",
         "Failed to apply theme:": "应用主题失败：",
@@ -332,11 +336,13 @@ def get_translations():
         "Not a file:": "不是文件：",
         "Plugin": "插件",
         "has been added successfully!": "已成功添加！",
+        "Plugin '{0}' has been added successfully!": "插件 '{0}' 已成功添加！",
         "Failed to add plugin:": "添加插件失败：",
         "Failed to extract": "提取失败",
         "The zip file is corrupted.": "压缩文件已损坏。",
         "The plugin folder": "插件文件夹",
         "removed.": "已移除。",
+        "Plugin folder '{plugin_name}' removed.": "插件文件夹 '{plugin_name}' 已移除。",
         "Failed to remove plugin folder:": "移除插件文件夹失败：",
         "Plugin file": "插件文件",
         "removed.": "已移除。",
@@ -463,8 +469,8 @@ def get_translations():
         "Loading...": "加载中...",
         "Activating...": "激活中...",
         "Deactivating...": "停用中...",
-        "Active": "活动",
-        "Inactive": "非活动",
+        "Activated": "激活",
+        "Deactivated": "停用",
 
         # Additional translations needed for complete localization
         "No Blender versions were found on the release page.": "在发布页面上未找到 Blender 版本。",
@@ -628,6 +634,7 @@ def get_translations():
         # Render tab (render_tab.py)
         "Select Render Folder": "选择渲染文件夹",
         "Saved": "已保存",
+        "Paths updated. Restart to apply.": "路径已更新。请重启应用。",
         "Note saved.": "笔记已保存。",
         "Delete '{}'?": "删除 '{}'？",
 
