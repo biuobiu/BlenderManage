@@ -13,6 +13,7 @@ import webbrowser
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import re
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 import requests
@@ -130,7 +131,7 @@ class VersionManagementTab:
                 self.install_btn.configure(text=_('Install'), state='normal')
                 self.cancel_event.clear()
                 self.install_progress_var.set(0)
-                self.frame.after(0, lambda: self._safe_messagebox("info", _("Success"), _(f"Successfully installed Blender {version}.")))
+                self.frame.after(0, lambda: self._safe_messagebox("info", _("Success"), _("Successfully installed Blender {0}.").format(version)))
             elif msg[0] == 'UPDATE_TREEVIEW':
                 versions = msg[1]
                 links = msg[2]
@@ -854,7 +855,7 @@ class VersionManagementTab:
 
         versions = sorted([
             d for d in os.listdir(versions_dir)
-            if os.path.isdir(os.path.join(versions_dir, d)) and 'blender' in d.lower()
+            if os.path.isdir(os.path.join(versions_dir, d)) and ('blender' in d.lower() or re.search(r'\d+\.\d+', d))
         ])
 
         for index, version in enumerate(versions):
@@ -1041,13 +1042,13 @@ Terminal=false
         self._disable_installed_buttons()
 
         from tkinter import messagebox
-        confirm = messagebox.askyesno(_("Confirm"), _(f"Are you sure you want to remove {selected_version}?"))
+        confirm = messagebox.askyesno(_("Confirm"), _("Are you sure you want to remove {0}?").format(selected_version))
         if confirm:
             path_to_remove = os.path.join(get_blender_versions_dir(), selected_version)
             try:
                 shutil.rmtree(path_to_remove)
                 self._refresh_installed_versions()
-                messagebox.showinfo(_("Success"), _(f"{selected_version} has been removed."))
+                messagebox.showinfo(_("Success"), _("{0} has been removed.").format(selected_version))
                 self._enable_installed_buttons()
             except Exception as e:
                 messagebox.showerror(_("Error"), _(f"Failed to remove {selected_version}: {e}"))

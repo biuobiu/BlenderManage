@@ -380,6 +380,7 @@ def get_translations():
         "Blender executable not found for version": "未找到版本的可执行文件",
         "Failed to launch Blender:": "启动 Blender 失败：",
         "Please select a Blender version to remove.": "请选择要移除的 Blender 版本。",
+        "{0} has been removed.": "{0} 已移除。",
         "has been removed.": "已移除。",
         "Failed to remove": "移除失败",
         "No version selected.": "未选择版本。",
@@ -406,6 +407,9 @@ def get_translations():
         "Transfering Your": "正在传输您的",
         "Blender..": "Blender..",
         "Done!": "完成！",
+        "Done": "完成",
+        "Blender installed.": "Blender 已安装。",
+        "Successfully installed Blender {0}.": "{0} 安装成功。",
         "Wait Please...": "请稍候...",
         "Downloading and Installing Update...\nPlease wait.": "正在下载和安装更新...\n请稍候。",
         "Installing Latest \n Blender Version..": "正在安装最新版\nBlender 版本..",
@@ -542,6 +546,7 @@ def get_translations():
         "Are you sure you want to remove the plugin folder '{plugin_name}'?": "您确定要删除插件文件夹 '{plugin_name}' 吗？",
         "Are you sure you want to remove the plugin file '{plugin_name}.py'?": "您确定要删除插件文件 '{plugin_name}.py' 吗？",
         "Are you sure you want to remove '{project_path}'?": "您确定要删除 '{project_path}' 吗？",
+        "Are you sure you want to remove {0}?": "您确定要删除 {0} 吗？",
         "Are you sure you want to remove {selected_version}?": "您确定要删除 {selected_version} 吗？",
 
         # Progress/Installation strings

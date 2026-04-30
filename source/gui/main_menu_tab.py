@@ -309,8 +309,8 @@ class MainMenuTab:
                                 pct = downloaded / total_length * 100
                                 self.app.after(0, lambda v=pct: self.progress_var.set(v))
 
-                import shutil, zipfile
-                target = get_blender_install_dir()
+                import shutil, zipfile, os
+                target = os.path.join(get_blender_versions_dir(), latest)
                 if os.path.exists(target):
                     shutil.rmtree(target)
                 ensure_dir(target)
